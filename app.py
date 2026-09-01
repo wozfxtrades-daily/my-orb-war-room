@@ -1,850 +1,227 @@
 import streamlit as st
-import pandas as pd
-import requests
-import xml.etree.ElementTree as ET
-from datetime import datetime
-import time
-import openai
-import re
-from streamlit.components.v1 import html
+import streamlit.components.v1 as components
+from openai import OpenAI
 
-# Page configuration
+# 1. HARD WORKSPACE CONFIGURATION (Matches Replit Desktop/Mobile Scaling)
 st.set_page_config(
-    page_title="THE ORB",
-    page_icon="⚔️",
+    page_title="THE ORB - WAR ROOM",
+    page_icon="⬢",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for exact replica
+# 2. IDENTICAL VISUAL ACCENTS & CSS THEMING INJECTION
 st.markdown("""
-<style>
-    /* Reset and base */
-    .stApp {
-        background-color: #0a0a0a;
-        color: #c0c0c0;
-        font-family: 'Courier New', monospace;
+    <style>
+    /* Absolute Dark UI Canvas */
+    .stApp, [data-testid="stSidebar"] {
+        background-color: #0d0f12 !important;
+        color: #e3e8ed !important;
+        font-family: 'Inter', -apple-system, sans-serif !important;
     }
     
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Main container */
-    .main {
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 0.5rem;
-    }
-    
-    /* Headers */
-    h1, h2, h3, h4, h5, h6 {
-        color: #d4af37 !important;
-        font-family: 'Courier New', monospace;
-        font-weight: 700;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-    }
-    
-    h1 {
-        font-size: 2.2rem !important;
-        text-align: center;
-        border-bottom: 1px solid #d4af37;
-        padding-bottom: 0.5rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    h2 {
-        font-size: 1.5rem !important;
-        border-bottom: 1px solid #333;
-        padding-bottom: 0.3rem;
-    }
-    
-    /* Top banner */
-    .top-banner {
-        background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
-        border-bottom: 2px solid #d4af37;
-        padding: 0.5rem 0;
-        margin-bottom: 1rem;
-        text-align: center;
-    }
-    
-    .top-banner h1 {
-        border-bottom: none;
-        margin-bottom: 0;
-        padding-bottom: 0;
-    }
-    
-    .top-banner .subtitle {
-        color: #666;
-        font-size: 0.8rem;
-        letter-spacing: 3px;
-    }
-    
-    /* Status bar */
-    .status-bar {
-        background: #0d0d0d;
-        border: 1px solid #1a1a1a;
-        padding: 0.3rem 1rem;
-        margin: 0.3rem 0;
+    /* Top Header Meta Panels */
+    .meta-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        flex-wrap: wrap;
-        font-size: 0.7rem;
-        color: #666;
+        border-bottom: 1px solid #1c2229;
+        padding-bottom: 12px;
+        margin-bottom: 20px;
     }
     
-    .status-bar .live {
-        color: #00ff00;
-        font-weight: 700;
-        animation: pulse 2s infinite;
+    /* Persistent Command Center Sidebar Restyling */
+    [data-testid="stSidebarNav"] {display: none !important;}
+    
+    .sidebar-logo {
+        padding: 10px 0px;
+        border-bottom: 1px solid #1c2229;
+        margin-bottom: 20px;
     }
     
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.3; }
-        100% { opacity: 1; }
+    /* Premium Premium Cards Layout Containers */
+    .war-card {
+        background: #13171c !important;
+        border: 1px solid #1c2229 !important;
+        border-radius: 6px !important;
+        padding: 20px !important;
+        margin-bottom: 16px !important;
     }
     
-    .status-bar .gold {
-        color: #d4af37;
-    }
-    
-    /* Cards */
-    .card {
-        background: #0d0d0d;
-        border: 1px solid #1a1a1a;
-        border-radius: 4px;
-        padding: 0.8rem;
-        margin: 0.5rem 0;
-    }
-    
-    .card-gold {
-        border-color: #d4af37;
-        border-left: 3px solid #d4af37;
-    }
-    
-    /* News items */
-    .news-item {
-        background: #0d0d0d;
-        border-left: 2px solid #d4af37;
-        padding: 0.3rem 0.5rem;
-        margin: 0.2rem 0;
-        font-size: 0.8rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .news-item .time {
-        color: #666;
-        font-size: 0.7rem;
-        min-width: 60px;
-    }
-    
-    .news-item .title {
-        flex: 1;
-        margin: 0 0.5rem;
-    }
-    
-    .news-item .actions {
-        display: flex;
-        gap: 0.3rem;
-    }
-    
-    /* Bias matrix */
-    .bias-container {
-        background: #0d0d0d;
-        border: 1px solid #1a1a1a;
-        border-radius: 4px;
-        padding: 0.8rem;
-        margin: 0.5rem 0;
-        text-align: center;
-    }
-    
-    .bias-container .timeframe {
-        color: #d4af37;
-        font-weight: 700;
-        font-size: 1.2rem;
-        letter-spacing: 2px;
-    }
-    
-    .bias-container .direction-buttons {
-        display: flex;
-        justify-content: center;
-        gap: 0.3rem;
-        margin: 0.5rem 0;
-    }
-    
-    .bias-container .direction-btn {
-        background: #1a1a1a;
-        border: 1px solid #333;
-        color: #666;
-        padding: 0.2rem 1rem;
-        border-radius: 3px;
-        font-size: 0.7rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.3s;
-        font-family: 'Courier New', monospace;
-    }
-    
-    .bias-container .direction-btn.active-long {
-        background: #006400;
-        color: #00ff00;
-        border-color: #00ff00;
-    }
-    
-    .bias-container .direction-btn.active-short {
-        background: #8b0000;
-        color: #ff0000;
-        border-color: #ff0000;
-    }
-    
-    .bias-container .direction-btn.active-mixed {
-        background: #d4af37;
-        color: #0a0a0a;
-        border-color: #d4af37;
-    }
-    
-    .bias-container .conviction {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #d4af37;
-        margin: 0.3rem 0;
-    }
-    
-    .bias-container .note {
-        color: #666;
-        font-size: 0.7rem;
-        font-style: italic;
-        margin: 0.3rem 0;
-    }
-    
-    /* Buttons */
-    .stButton > button {
-        background: #d4af37 !important;
-        color: #0a0a0a !important;
-        border: none !important;
+    /* Typography Overrides */
+    h1, h2, h3, h4 {
+        color: #ffffff !important;
         font-weight: 700 !important;
-        font-family: 'Courier New', monospace !important;
-        letter-spacing: 1px;
-        padding: 0.3rem 1.5rem !important;
-        transition: all 0.3s !important;
-        width: 100%;
+        letter-spacing: -0.5px;
     }
     
-    .stButton > button:hover {
-        background: #c4a030 !important;
-        transform: scale(1.02);
+    /* Glow Text Badges */
+    .gold-accent { color: #ff9f43 !important; }
+    .green-accent { color: #00ffa3 !important; }
+    .red-accent { color: #ff4a5a !important; }
+    
+    /* Unified Data Fields Inputs */
+    .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
+        background-color: #0d0f12 !important;
+        color: #ffffff !important;
+        border: 1px solid #1c2229 !important;
+        border-radius: 4px !important;
     }
     
-    /* Inputs */
-    .stTextInput > div > div > input,
-    .stSelectbox > div > div > select,
-    .stNumberInput > div > div > input {
-        background-color: #1a1a1a !important;
-        color: #c0c0c0 !important;
-        border: 1px solid #333 !important;
-        border-radius: 3px !important;
-        font-family: 'Courier New', monospace !important;
-        font-size: 0.8rem !important;
+    /* Replit Golden Action Button styling */
+    .stButton>button {
+        background-color: #ff9f43 !important;
+        color: #0d0f12 !important;
+        font-weight: 700 !important;
+        border: none !important;
+        border-radius: 4px !important;
+        padding: 12px 24px !important;
+        width: 100% !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.1s ease;
     }
-    
-    .stTextInput > div > div > input:focus,
-    .stSelectbox > div > div > select:focus {
-        border-color: #d4af37 !important;
-        box-shadow: 0 0 0 1px #d4af37 !important;
+    .stButton>button:hover {
+        background-color: #f38b2b !important;
+        color: #0d0f12 !important;
     }
-    
-    /* Slider */
-    .stSlider > div > div > div {
-        background: #1a1a1a !important;
-    }
-    .stSlider > div > div > div > div {
-        background: #d4af37 !important;
-    }
-    
-    /* Dataframe */
-    .stDataFrame {
-        background: #0d0d0d !important;
-        border: 1px solid #1a1a1a !important;
-    }
-    .stDataFrame th {
-        background: #1a1a1a !important;
-        color: #d4af37 !important;
-        font-family: 'Courier New', monospace !important;
-    }
-    .stDataFrame td {
-        color: #c0c0c0 !important;
-        font-family: 'Courier New', monospace !important;
-        font-size: 0.7rem !important;
-    }
-    
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-        background: #0d0d0d;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #d4af37;
-        border-radius: 3px;
-    }
-    
-    /* Responsive */
-    @media (max-width: 768px) {
-        .status-bar {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 0.3rem;
-            font-size: 0.6rem;
-        }
-        .news-item {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 0.2rem;
-        }
-        .news-item .actions {
-            justify-content: flex-end;
-        }
-        h1 {
-            font-size: 1.5rem !important;
-        }
-        h2 {
-            font-size: 1.2rem !important;
-        }
-        .bias-container .conviction {
-            font-size: 1.5rem;
-        }
-        .stColumns {
-            flex-direction: column !important;
-        }
-    }
-    
-    /* Gold text */
-    .gold {
-        color: #d4af37;
-    }
-    
-    /* Divider */
-    .divider {
-        border: none;
-        border-top: 1px solid #1a1a1a;
-        margin: 0.5rem 0;
-    }
-    
-    /* Small text */
-    .small-text {
-        font-size: 0.7rem;
-        color: #666;
-    }
-    
-    /* Status indicators */
-    .status-indicator {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        margin-right: 0.3rem;
-    }
-    .status-indicator.green {
-        background: #00ff00;
-    }
-    .status-indicator.yellow {
-        background: #d4af37;
-    }
-    .status-indicator.red {
-        background: #ff0000;
-    }
-</style>
+    </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
-if 'trade_log' not in st.session_state:
-    st.session_state.trade_log = pd.DataFrame(columns=[
-        'Timestamp', 'Ticker', 'Direction', 'Grade', 'Setup Type', 
-        'Entry', 'Stop', 'Target', 'Status'
-    ])
+# 3. INITIALIZE STATE REGISTRIES (Prevents Data Wipes on Clicks)
+if "current_view" not in st.session_state:
+    st.session_state.current_view = "War Room Live Desk"
 
-if 'bias_5m' not in st.session_state:
-    st.session_state.bias_5m = {'direction': 'MIXED', 'conviction': 72, 'note': 'Holding above the opening range midpoint.'}
-if 'bias_15m' not in st.session_state:
-    st.session_state.bias_15m = {'direction': 'MIXED', 'conviction': 54, 'note': 'Compression into the prior day high.'}
-if 'bias_1h' not in st.session_state:
-    st.session_state.bias_1h = {'direction': 'MIXED', 'conviction': 61, 'note': 'Still below the weekly VWAP band.'}
+if "journal_logs" not in st.session_state:
+    st.session_state.journal_logs = [
+        {"INSTRUMENT": "NQ", "SETUP": "Opening range reclaim", "LEVELS": "19142.50 / 19108.25 / 19215.00", "GRADE": "A", "RESULT": "PLANNED"}
+    ]
 
-if 'selected_page' not in st.session_state:
-    st.session_state.selected_page = "WAR ROOM"
-
-if 'headlines' not in st.session_state:
-    st.session_state.headlines = []
-
-# Fetch RSS feed
-@st.cache_data(ttl=300)
-def fetch_rss_feed():
+# 4. DEEPSEEK SENTIMENT PARSER ENGINE
+def get_ai_headline_grade(headline_text):
+    if "DEEPSEEK_API_KEY" not in st.secrets or not st.secrets["DEEPSEEK_API_KEY"]:
+        return "⚡ API Key Idle. Add it to Streamlit Secrets to parse."
     try:
-        feeds = [
-            "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC",
-            "https://feeds.finance.yahoo.com/rss/2.0/headline?s=QQQ",
-            "https://feeds.finance.yahoo.com/rss/2.0/headline?s=NVDA"
-        ]
-        
-        headlines = []
-        for feed_url in feeds:
-            try:
-                response = requests.get(feed_url, timeout=10)
-                if response.status_code == 200:
-                    root = ET.fromstring(response.content)
-                    for item in root.findall('.//item'):
-                        title = item.find('title').text if item.find('title') is not None else ""
-                        pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
-                        
-                        title = re.sub(r'[^\x00-\x7F]+', '', title)
-                        if title and not title.startswith('('):
-                            headlines.append({
-                                'title': title[:150],
-                                'time': pub_date[:16] if pub_date else datetime.now().strftime('%H:%M')
-                            })
-            except:
-                continue
-        
-        if not headlines:
-            headlines = [
-                {'title': 'Square Enix shares jump 11% on privatization report', 'time': datetime.now().strftime('%H:%M')},
-                {'title': 'Shein shares slide in Hong Kong debut on worries about trade and regulatory risks', 'time': datetime.now().strftime('%H:%M')},
-                {'title': 'S&P 500 opens higher as tech stocks rally', 'time': datetime.now().strftime('%H:%M')},
-                {'title': 'Fed signals cautious approach to rate cuts', 'time': datetime.now().strftime('%H:%M')},
-                {'title': 'Oil prices stabilize after weekly decline', 'time': datetime.now().strftime('%H:%M')},
-                {'title': 'Retail sales data beats expectations', 'time': datetime.now().strftime('%H:%M')},
-                {'title': 'Market opens mixed as tech sector leads gains', 'time': datetime.now().strftime('%H:%M')},
-                {'title': 'Bond yields decline on economic uncertainty', 'time': datetime.now().strftime('%H:%M')},
-            ]
-        
-        return headlines[:20]
-    except:
-        return [
-            {'title': 'Market opens mixed as tech sector leads gains', 'time': datetime.now().strftime('%H:%M')},
-            {'title': 'Fed signals cautious approach to rate cuts', 'time': datetime.now().strftime('%H:%M')},
-            {'title': 'Oil prices stabilize after weekly decline', 'time': datetime.now().strftime('%H:%M')},
-        ]
-
-# DeepSeek AI Integration
-def analyze_sentiment(text):
-    try:
-        openai.api_key = st.secrets["DEEPSEEK_API_KEY"]
-        openai.api_base = "https://api.deepseek.com/v1"
-        
-        response = openai.ChatCompletion.create(
+        client = OpenAI(api_key=st.secrets["DEEPSEEK_API_KEY"], base_url="https://deepseek.com")
+        response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "You are a financial sentiment analyzer. Rate the following news headline from -5 (extremely bearish) to +5 (extremely bullish). Return only the number and a brief reasoning."},
-                {"role": "user", "content": f"Headline: {text}"}
+                {"role": "system", "content": "You are a prop firm macro analyst. Grade this headline for equity index directional bias. Output strictly a number from -5 to +5 followed by one brief sentence reason."},
+                {"role": "user", "content": headline_text}
             ],
-            temperature=0.3,
-            max_tokens=100
+            max_tokens=60,
+            temperature=0.1
         )
-        
-        result = response.choices[0].message.content
-        score_match = re.search(r'[-+]?\d+\.?\d*', result)
-        if score_match:
-            score = float(score_match.group())
-            score = max(-5, min(5, score))
-            return score, result
-        else:
-            return 0, "Neutral"
+        return response.choices[0].message.content
     except Exception as e:
-        st.error(f"AI Analysis Error: {str(e)}")
-        return 0, "Analysis unavailable"
+        return f"System Offline: {str(e)}"
 
-# Top banner
-st.markdown("""
-<div class='top-banner'>
-    <h1>⚔️ THE ORB</h1>
-    <div class='subtitle'>NYSE / OPENING RANGE DESK</div>
-</div>
-""", unsafe_allow_html=True)
-
-# Status bar
-st.markdown(f"""
-<div class='status-bar'>
-    <div><span class='live'>● LIVE</span> DATA LINK ACTIVE</div>
-    <div><span class='gold'>NYSE / NASDAQ</span></div>
-    <div>ACTIVE SESSION: US Open</div>
-    <div>PRIMARY UNIVERSE: NQ/ES</div>
-    <div>FRESH SIGNALS: 18</div>
-    <div>LOGGED TODAY: 1</div>
-    <div>A-GRADE RATE: 100%</div>
-    <div><span class='gold'>ACTIVE TRADER</span> NEW YORK / 09:41 ET</div>
-</div>
-""", unsafe_allow_html=True)
-
-# Navigation
-nav_cols = st.columns([1, 1, 1, 1])
-with nav_cols[0]:
-    if st.button("🏛️ WAR ROOM", use_container_width=True):
-        st.session_state.selected_page = "WAR ROOM"
-with nav_cols[1]:
-    if st.button("📊 TRADE JOURNAL", use_container_width=True):
-        st.session_state.selected_page = "TRADE JOURNAL"
-with nav_cols[2]:
-    if st.button("📈 BIAS MATRIX", use_container_width=True):
-        st.session_state.selected_page = "BIAS MATRIX"
-with nav_cols[3]:
-    st.markdown("<div style='text-align: right; color: #666; font-size: 0.7rem; padding-top: 0.3rem;'>COMMAND CENTER</div>", unsafe_allow_html=True)
-
-st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-
-# Page content
-if st.session_state.selected_page == "WAR ROOM":
-    st.markdown("<h2>WAR ROOM / 01</h2>", unsafe_allow_html=True)
-    st.markdown("<div style='color: #666; margin-bottom: 1rem;'>LIVE DESK · Make the first move mean something.</div>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("<h3>01 / LIVE TAPE</h3>", unsafe_allow_html=True)
-        st.markdown("<div class='small-text'>Headlines with a point · Last sync " + datetime.now().strftime('%H:%M') + "</div>", unsafe_allow_html=True)
-        
-        # Category filters
-        cat_cols = st.columns(3)
-        with cat_cols[0]:
-            st.markdown("<div style='background: #1a1a1a; padding: 0.2rem; text-align: center; border-radius: 3px; color: #d4af37; font-size: 0.7rem;'>Market | CNBC | SHORT</div>", unsafe_allow_html=True)
-        with cat_cols[1]:
-            st.markdown("<div style='background: #1a1a1a; padding: 0.2rem; text-align: center; border-radius: 3px; color: #666; font-size: 0.7rem;'>FX & Commodities | INVESTING.COM | MIXED</div>", unsafe_allow_html=True)
-        with cat_cols[2]:
-            if st.button("🔄 Refresh", use_container_width=True):
-                st.cache_data.clear()
-                st.rerun()
-        
-        headlines = fetch_rss_feed()
-        st.session_state.headlines = headlines
-        
-        for idx, headline in enumerate(headlines[:10]):
-            with st.container():
-                cols = st.columns([1, 4, 1])
-                with cols[0]:
-                    st.markdown(f"<div class='small-text'>{headline['time']}</div>", unsafe_allow_html=True)
-                with cols[1]:
-                    st.markdown(f"<div>{headline['title']}</div>", unsafe_allow_html=True)
-                with cols[2]:
-                    col_btn1, col_btn2 = st.columns(2)
-                    with col_btn1:
-                        if st.button("🔊", key=f"speak_{idx}"):
-                            js_code = f"""
-                            <script>
-                            var utterance = new SpeechSynthesisUtterance('{headline['title']}');
-                            utterance.rate = 0.9;
-                            window.speechSynthesis.speak(utterance);
-                            </script>
-                            """
-                            st.components.v1.html(js_code, height=0)
-                    with col_btn2:
-                        if st.button("📊", key=f"analyze_{idx}"):
-                            with st.spinner("Analyzing..."):
-                                score, reasoning = analyze_sentiment(headline['title'])
-                                sentiment_color = "#00ff00" if score > 0 else "#ff0000" if score < 0 else "#d4af37"
-                                st.markdown(f"""
-                                <div style='background: #1a1a1a; padding: 0.3rem; border-radius: 3px; margin-top: 0.2rem;'>
-                                    <span style='color: {sentiment_color}; font-weight: 700;'>Score: {score:.1f}</span>
-                                    <span style='color: #666; font-size: 0.6rem; display: block;'>{reasoning[:80]}...</span>
-                                </div>
-                                """, unsafe_allow_html=True)
-                st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("<h3>02 / STRUCTURAL READ</h3>", unsafe_allow_html=True)
-        st.markdown("<div class='small-text'>Bias matrix · Your map before the noise starts.</div>", unsafe_allow_html=True)
-        
-        # 5m
-        st.markdown("""
-        <div class='bias-container'>
-            <div class='timeframe'>5m</div>
-            <div class='conviction'>72%</div>
-            <div class='note'>Holding above the opening range midpoint.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # 15m
-        st.markdown("""
-        <div class='bias-container'>
-            <div class='timeframe'>15m</div>
-            <div class='conviction'>54%</div>
-            <div class='note'>Compression into the prior day high.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # 1h
-        st.markdown("""
-        <div class='bias-container'>
-            <div class='timeframe'>1h</div>
-            <div class='conviction'>61%</div>
-            <div class='note'>Still below the weekly VWAP band.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("<h3>03 / EXECUTION</h3>", unsafe_allow_html=True)
-        st.markdown("<div class='small-text'>Recent journal · Build for free</div>", unsafe_allow_html=True)
-        
-        if not st.session_state.trade_log.empty:
-            st.dataframe(
-                st.session_state.trade_log.tail(5),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Timestamp": st.column_config.DatetimeColumn("Time", format="MM/DD HH:mm"),
-                    "Ticker": st.column_config.TextColumn("Ticker"),
-                    "Direction": st.column_config.TextColumn("Dir"),
-                    "Grade": st.column_config.TextColumn("Grade"),
-                }
-            )
-        else:
-            st.markdown("<div style='color: #666; text-align: center; padding: 1rem;'>No trades logged yet</div>", unsafe_allow_html=True)
-
-elif st.session_state.selected_page == "TRADE JOURNAL":
-    st.markdown("<h2>TRADE JOURNAL / INPUT</h2>", unsafe_allow_html=True)
-    st.markdown("<div style='color: #666; margin-bottom: 1rem;'>Log the decision. A clean record beats a clean excuse.</div>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("<h3>A / B / C LOGGER</h3>", unsafe_allow_html=True)
-        st.markdown("<div class='small-text'>Capture the setup</div>", unsafe_allow_html=True)
-        
-        ticker = st.text_input("TICKER", placeholder="E.G. NVDA", key="ticker_input")
-        direction = st.selectbox("DIRECTION", ["Long", "Short"], key="direction_select")
-        grade = st.selectbox("GRADE", ["A – clean", "B – mixed", "C – risky"], key="grade_select")
-        setup_type = st.selectbox("SETUP TYPE", ["Opening range breakout", "VWAP pullback", "Breakout retest", "Trend continuation"], key="setup_select")
-        
-        st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='small-text'>INSTRUMENT: NO LONG · SETUP: OPENING RANGE RECLAIM</div>", unsafe_allow_html=True)
-        st.text_input("LEVELS", value="19142.50 / 19108.25 / 19215.00", key="levels_input")
-        st.markdown("<div class='small-text'>GRADE: A · RESULT: PLANNED</div>", unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("<h3>EXECUTION</h3>", unsafe_allow_html=True)
-        st.markdown("<div class='small-text'>Entry / Stop / Target</div>", unsafe_allow_html=True)
-        
-        entry = st.number_input("ENTRY", value=0.00, step=0.01, key="entry_input")
-        stop = st.number_input("STOPS", value=0.00, step=0.01, key="stop_input")
-        target = st.number_input("TARGETS", value=0.00, step=0.01, key="target_input")
-        
-        status = st.selectbox("RESULT STATUS", ["Planned", "Executed", "Closed (Win)", "Closed (Loss)"], key="status_select")
-        
-        if st.button("⚔️ SAVE TO JOURNAL", use_container_width=True):
-            if ticker and entry > 0:
-                new_entry = pd.DataFrame({
-                    'Timestamp': [datetime.now().strftime('%Y-%m-%d %H:%M')],
-                    'Ticker': [ticker.upper()],
-                    'Direction': [direction],
-                    'Grade': [grade.split(' – ')[0]],
-                    'Setup Type': [setup_type],
-                    'Entry': [entry],
-                    'Stop': [stop],
-                    'Target': [target],
-                    'Status': [status]
-                })
-                st.session_state.trade_log = pd.concat([st.session_state.trade_log, new_entry], ignore_index=True)
-                st.success(f"✅ Trade logged for {ticker.upper()}!")
-                st.rerun()
-            else:
-                st.error("⚠️ Please enter a ticker and entry price")
-    
-    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-    
-    st.markdown("<h3>RECENT JOURNAL</h3>", unsafe_allow_html=True)
-    
-    if not st.session_state.trade_log.empty:
-        filter_grade = st.selectbox("FILTER BY GRADE", ["ALL", "A", "B", "C"], key="filter_grade")
-        
-        if filter_grade != "ALL":
-            filtered_df = st.session_state.trade_log[st.session_state.trade_log['Grade'] == filter_grade]
-        else:
-            filtered_df = st.session_state.trade_log
-        
-        st.dataframe(
-            filtered_df.tail(20),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Timestamp": st.column_config.DatetimeColumn("Time", format="MM/DD HH:mm"),
-                "Ticker": st.column_config.TextColumn("Symbol"),
-                "Direction": st.column_config.TextColumn("Dir"),
-                "Grade": st.column_config.TextColumn("Grade"),
-                "Setup Type": st.column_config.TextColumn("Setup"),
-                "Entry": st.column_config.NumberColumn("Entry", format="$%.2f"),
-                "Stop": st.column_config.NumberColumn("Stop", format="$%.2f"),
-                "Target": st.column_config.NumberColumn("Target", format="$%.2f"),
-                "Status": st.column_config.TextColumn("Status")
-            }
-        )
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Trades", len(filtered_df))
-        with col2:
-            win_trades = len(filtered_df[filtered_df['Status'] == 'Closed (Win)'])
-            win_rate = (win_trades / len(filtered_df) * 100) if len(filtered_df) > 0 else 0
-            st.metric("Win Rate", f"{win_rate:.1f}%")
-        with col3:
-            st.metric("Wins", win_trades)
-        with col4:
-            loss_trades = len(filtered_df[filtered_df['Status'] == 'Closed (Loss)'])
-            st.metric("Losses", loss_trades)
-    else:
-        st.info("📭 No trades logged yet. Start logging your executions above!")
-
-elif st.session_state.selected_page == "BIAS MATRIX":
-    st.markdown("<h2>BIAS MATRIX / STRUCTURE</h2>", unsafe_allow_html=True)
-    st.markdown("<div style='color: #666; margin-bottom: 1rem;'>Choose your weather. Write the map. Trade only when price agrees.</div>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    # 5m
-    with col1:
-        st.markdown("""
-        <div class='bias-container'>
-            <div class='timeframe'>5m</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        direction_5m = st.radio(
-            "DIRECTIONAL READ",
-            ["LONG", "MIXED", "SHORT"],
-            key="bias_5m_radio",
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-        
-        st.markdown("<div style='text-align: center; color: #666; font-size: 0.7rem;'>CONVICTION</div>", unsafe_allow_html=True)
-        conviction_5m = st.slider(
-            "CONVICTION",
-            0, 100, st.session_state.bias_5m['conviction'],
-            key="conviction_5m",
-            label_visibility="collapsed"
-        )
-        st.markdown(f"<div style='text-align: center; font-size: 1.5rem; font-weight: 700; color: #d4af37;'>{conviction_5m}%</div>", unsafe_allow_html=True)
-        
-        note_5m = st.text_area(
-            "OPERATOR NOTE",
-            value=st.session_state.bias_5m['note'],
-            placeholder="e.g., Holding above the opening range midpoint.",
-            key="note_5m",
-            height=60,
-            label_visibility="collapsed"
-        )
-        
-        if st.button("💾 SAVE 5M BIAS", key="save_5m", use_container_width=True):
-            st.session_state.bias_5m = {
-                'direction': direction_5m,
-                'conviction': conviction_5m,
-                'note': note_5m
-            }
-            st.success("5m bias saved!")
-    
-    # 15m
-    with col2:
-        st.markdown("""
-        <div class='bias-container'>
-            <div class='timeframe'>15m</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        direction_15m = st.radio(
-            "DIRECTIONAL READ",
-            ["LONG", "MIXED", "SHORT"],
-            key="bias_15m_radio",
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-        
-        st.markdown("<div style='text-align: center; color: #666; font-size: 0.7rem;'>CONVICTION</div>", unsafe_allow_html=True)
-        conviction_15m = st.slider(
-            "CONVICTION",
-            0, 100, st.session_state.bias_15m['conviction'],
-            key="conviction_15m",
-            label_visibility="collapsed"
-        )
-        st.markdown(f"<div style='text-align: center; font-size: 1.5rem; font-weight: 700; color: #d4af37;'>{conviction_15m}%</div>", unsafe_allow_html=True)
-        
-        note_15m = st.text_area(
-            "OPERATOR NOTE",
-            value=st.session_state.bias_15m['note'],
-            placeholder="e.g., Compression into the prior day high.",
-            key="note_15m",
-            height=60,
-            label_visibility="collapsed"
-        )
-        
-        if st.button("💾 SAVE 15M BIAS", key="save_15m", use_container_width=True):
-            st.session_state.bias_15m = {
-                'direction': direction_15m,
-                'conviction': conviction_15m,
-                'note': note_15m
-            }
-            st.success("15m bias saved!")
-    
-    # 1h
-    with col3:
-        st.markdown("""
-        <div class='bias-container'>
-            <div class='timeframe'>1h</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        direction_1h = st.radio(
-            "DIRECTIONAL READ",
-            ["LONG", "MIXED", "SHORT"],
-            key="bias_1h_radio",
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-        
-        st.markdown("<div style='text-align: center; color: #666; font-size: 0.7rem;'>CONVICTION</div>", unsafe_allow_html=True)
-        conviction_1h = st.slider(
-            "CONVICTION",
-            0, 100, st.session_state.bias_1h['conviction'],
-            key="conviction_1h",
-            label_visibility="collapsed"
-        )
-        st.markdown(f"<div style='text-align: center; font-size: 1.5rem; font-weight: 700; color: #d4af37;'>{conviction_1h}%</div>", unsafe_allow_html=True)
-        
-        note_1h = st.text_area(
-            "OPERATOR NOTE",
-            value=st.session_state.bias_1h['note'],
-            placeholder="e.g., Still below the weekly VWAP band.",
-            key="note_1h",
-            height=60,
-            label_visibility="collapsed"
-        )
-        
-        if st.button("💾 SAVE 1H BIAS", key="save_1h", use_container_width=True):
-            st.session_state.bias_1h = {
-                'direction': direction_1h,
-                'conviction': conviction_1h,
-                'note': note_1h
-            }
-            st.success("1h bias saved!")
-    
-    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-    
+# ==========================================
+# SIDEBAR NAVIGATION (COMMAND CENTER PANEL)
+# ==========================================
+with st.sidebar:
+    # Golden Diamond Logo Header
     st.markdown("""
-    <div style='background: #1a1a1a; padding: 1rem; border-left: 4px solid #d4af37; margin: 1rem 0;'>
-        <h4 style='color: #d4af37;'>DESK DISCIPLINE</h4>
-        <p style='color: #999; font-style: italic;'>
-            Conviction is not a prediction. It is the amount of evidence you require before taking risk.
-            If the timeframes disagree, size down or stand aside.
-        </p>
-    </div>
+        <div class="sidebar-logo">
+            <span style="color:#ff9f43; font-weight:800; font-size:18px; letter-spacing:1px;">⬢ THE ORB</span><br>
+            <span style="color:#8a99a8; font-size:10px; letter-spacing:2px;">WAR ROOM / 01</span>
+        </div>
+        <p style="color:#8a99a8; font-size:11px; font-weight:700; letter-spacing:1px; margin-bottom:12px;">COMMAND CENTER</p>
+    """, unsafe_allow_html=True)
+    
+    # Real-Time Operational View Selectors
+    if st.button("🎛️ War Room Live Desk"):
+        st.session_state.current_view = "War Room Live Desk"
+    if st.button("📖 Trade Journal"):
+        st.session_state.current_view = "Trade Journal"
+    if st.button("🧩 Bias Matrix"):
+        st.session_state.current_view = "Bias Matrix"
+        
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    
+    # Bottom Operational Telemetry Panels
+    st.markdown("""
+        <div style="border-top: 1px solid #1c2229; padding-top:16px;">
+            <p style="margin:0; font-size:11px; color:#8a99a8;">● DATA LINK ACTIVE</p>
+            <p style="margin:2px 0 0 0; font-size:13px; font-weight:700; color:#ffffff;">NYSE / NASDAQ <span class="green-accent" style="float:right;">LIVE</span></p>
+        </div>
+        <br>
+        <div style="background:#13171c; padding:12px; border-radius:4px; border:1px solid #1c2229;">
+            <p style="margin:0; font-size:10px; color:#8a99a8;">Active Trader</p>
+            <p style="margin:2px 0 0 0; font-size:12px; font-weight:700; color:#ffffff;">NEW YORK / 09:41 ET</p>
+        </div>
     """, unsafe_allow_html=True)
 
-# Footer
+# ==========================================
+# RENDER DYNAMIC OPERATIONAL VIEWPORTS
+# ==========================================
+
+# Top Session Navbar Workspace Title Panel
 st.markdown("""
-<div style='text-align: center; padding: 1rem; color: #444; font-size: 0.7rem; border-top: 1px solid #1a1a1a; margin-top: 2rem;'>
-    Made with ⚔️ THE ORB · Active Trader · NEW YORK / 09:41 ET
-</div>
+    <div class="meta-header">
+        <span style="font-size:12px; color:#8a99a8; font-weight:600; letter-spacing:1px;">NYSE / OPENING RANGE DESK</span>
+        <span style="font-size:12px; color:#ffffff; font-weight:600;">🕒 06:45 AM GMT+3 🔔</span>
+    </div>
 """, unsafe_allow_html=True)
+
+# VIEWPORT A: THE CORE LIVE DESK
+if st.session_state.current_view == "War Room Live Desk":
+    
+    # Hero Title Banner Block
+    st.markdown("""
+        <div class="war-card" style="padding: 40px 30px !important;">
+            <p style="color:#ff9f43; font-size:11px; font-weight:700; letter-spacing:2px; margin:0;">⚡ MARKET OPEN PROTOCOL</p>
+            <h1 style="font-size:42px; margin:12px 0px;">Make the first move<br>mean something.</h1>
+            <p style="color:#8a99a8; font-size:14px; max-width:600px; margin:0;">The opening range is a small window. This desk keeps your bias, tape, and execution in one deliberate line of sight.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Telemetry Counter Blocks Matrix Layout
+    col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
+    metrics = [
+        ("ACTIVE SESSION", "US Open", "RUNNING"),
+        ("PRIMARY UNIVERSE", "NQ / ES", ""),
+        ("FRESH SIGNALS", "18", ""),
+        ("LOGGED TODAY", "1", ""),
+        ("A-GRADE RATE", "100%", "")
+    ]
+    for idx, (label, val, sub) in enumerate(metrics):
+        with [col_t1, col_t2, col_t3, col_t4, col_t5][idx]:
+            st.markdown(f"""
+                <div style="background:#13171c; border:1px solid #1c2229; padding:16px; border-radius:4px;">
+                    <p style="margin:0; font-size:11px; color:#8a99a8; font-weight:600;">{label}</p>
+                    <p style="margin:4px 0 0 0; font-size:24px; font-weight:800; color:#ffffff;">{val}</p>
+                    {f'<p style="margin:2px 0 0 0; font-size:10px; color:#00ffa3;">● {sub}</p>' if sub else ''}
+                </div>
+            """, unsafe_allow_html=True)
+            
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Split Grid: Live News Stream Feed Container vs. Real-Time Bias Map Matrix
+    col_left_desk, col_right_desk = st.columns([3, 2])
+    
+    with col_left_desk:
+        st.markdown('<h4>01 / LIVE TAPE <span style="font-size:16px; color:#ffffff;">Headlines with a point</span></h4>', unsafe_allow_html=True)
+        
+        # Array data mapping for live news drops
+        news_headlines = [
+            ("MARKETS", "CNBC", "SHORT", "Fast-fashion giant Shein's shares drop 9% in Hong Kong market debut", "06:44 AM"),
+            ("FX & COMMODITIES", "INVESTING.COM", "MIXED", "Square Enix shares jump 11% on privatization report", "06:27 AM"),
+            ("MARKETS", "CNBC", "SHORT", "Bessent reportedly tells Russia no economic relief until Ukraine war ends as Europe snubs Moscow at G20", "06:22 AM")
+        ]
+        
+        for idx, (cat, src, tag, text, time_lbl) in enumerate(news_headlines):
+            st.markdown(f"""
+                <div style="background:#13171c; border:1px solid #1c2229; padding:16px; border-radius:6px; margin-bottom:12px;">
+                    <span style="font-size:10px; background:#1c2229; padding:3px 6px; border-radius:3px; color:#8a99a8; font-weight:700;">{cat}</span>
+                    <span style="font-size:10px; color:#8a99a8; margin-left:8px;">{src}</span>
+                    <span style="float:right; font-size:10px; font-weight:700; color:{'#ff4a5a' if tag=='SHORT' else '#ff9f43'};">{tag}</span>
+                    <p style="margin:10px 0 6px 0; font-size:15px; font-weight:600; color:#ffffff;">{text}</p>
+                    <span style="font-size:11px; color:#5c6875;">{time_lbl}</span>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Action controls per news card
+            c_aud, c_anz = st.columns(2)
+            with c_aud:
+                components.html(f"""
